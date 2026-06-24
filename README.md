@@ -1,14 +1,14 @@
-# TARDIS — Prédiction des retards des trains SNCF
+# TARDIS — SNCF Train Delay Prediction
 
-Modèle de régression qui prédit le **retard moyen à l'arrivée** (en minutes) d'un trajet SNCF à partir de ses caractéristiques. Le projet comprend un notebook d'entraînement et une application Streamlit pour utiliser le modèle.
+A regression model that predicts the **average arrival delay** (in minutes) for an SNCF journey based on its characteristics. The project includes a training notebook and a Streamlit application to use the model.
 
-## Aperçu
+## Overview
 
-À partir d'un trajet (gare de départ, gare d'arrivée, année, mois), le modèle estime le retard moyen attendu. L'entraînement compare trois algorithmes scikit-learn, sélectionne le meilleur, et le sauvegarde dans un fichier `tardis_model.joblib` que l'application Streamlit charge pour faire des prédictions.
+Given a journey (departure station, arrival station, year, month), the model estimates the expected average delay. Training compares three scikit-learn algorithms, selects the best one, and saves it to `tardis_model.joblib`, which the Streamlit app loads to make predictions.
 
 ## Installation
 
-Créer un environnement virtuel puis installer les dépendances :
+Create a virtual environment and install the dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -16,78 +16,77 @@ source .venv/bin/activate
 pip install scikit-learn pandas numpy matplotlib joblib jupyter streamlit
 ```
 
-XGBoost est optionnel et n'est utilisé que comme challenger sur GPU :
+XGBoost is optional and only used as a GPU challenger:
 
 ```bash
 pip install xgboost
 ```
 
-## 1. Le notebook d'entraînement (`tardis_model.ipynb`)
+## 1. Training Notebook (`tardis_model.ipynb`)
 
-### Données et cible
+### Data and Target
 
-La cible prédite est `Average delay of all trains at arrival` (retard moyen à l'arrivée, en minutes). L'année 2020 est exclue de l'entraînement car le trafic réduit pendant la pandémie de COVID rend les retards non représentatifs.
+The predicted target is `Average delay of all trains at arrival` (in minutes). The year 2020 is excluded from training because reduced traffic during the COVID pandemic makes delays unrepresentative.
 
-### Features utilisées
+### Features Used
 
-Trois variables catégorielles : `Service`, `Departure station`, `Arrival station`.
+Three categorical variables: `Service`, `Departure station`, `Arrival station`.
 
-Huit variables numériques : `Average journey time`, `Number of scheduled trains`, `Year`, `Month`, plus des mesures décrivant l'état du trafic au départ et à l'arrivée (`Average delay of late trains at departure`, `Average delay of all trains at departure`, `Number of trains delayed at arrival`, `Average delay of late trains at arrival`).
+Eight numerical variables: `Average journey time`, `Number of scheduled trains`, `Year`, `Month`, plus measurements describing traffic conditions at departure and arrival (`Average delay of late trains at departure`, `Average delay of all trains at departure`, `Number of trains delayed at arrival`, `Average delay of late trains at arrival`).
 
-### Modèles comparés
+### Models Compared
 
-Le notebook entraîne et compare trois modèles via un registre modulaire (`MODELS`), ce qui permet d'ajouter un nouvel algorithme simplement en ajoutant une entrée au dictionnaire :
+The notebook trains and compares three models via a modular registry (`MODELS`), making it easy to add a new algorithm by simply adding an entry to the dictionary:
 
-| Modèle | Type |
+| Model | Type |
 |---|---|
-| Ridge | Régression linéaire régularisée |
-| RandomForest | Forêt d'arbres (bagging) |
-| HistGradientBoosting | Boosting par histogrammes |
+| Ridge | Regularized linear regression |
+| RandomForest | Ensemble of trees (bagging) |
+| HistGradientBoosting | Histogram-based boosting |
 
-Chaque modèle est optimisé par `RandomizedSearchCV` avec une validation temporelle (`TimeSeriesSplit`), de sorte que la comparaison soit équitable. Une baseline (`DummyRegressor` qui prédit toujours la moyenne) sert de référence à battre.
+Each model is tuned with `RandomizedSearchCV` using time-series cross-validation (`TimeSeriesSplit`) for a fair comparison. A baseline (`DummyRegressor` always predicting the mean) serves as the reference to beat.
 
-Un challenger optionnel `XGBoost` sur GPU est testé si le boosting gagne : il ne remplace le modèle final que s'il obtient un meilleur score.
+An optional `XGBoost` GPU challenger is tested if boosting wins: it only replaces the final model if it achieves a better score.
 
 ### Validation
 
-Le découpage train/test est chronologique (80 % les plus anciens pour l'entraînement, 20 % les plus récents pour le test), afin de simuler une prédiction sur des mois non vus et d'éviter toute fuite du futur dans l'entraînement.
+The train/test split is chronological (oldest 80% for training, most recent 20% for testing) to simulate prediction on unseen months and prevent future data leakage.
 
-Les métriques rapportées sont le RMSE, le MAE et le R².
+Reported metrics are RMSE, MAE, and R².
 
-### Sauvegarde du modèle
+### Saving the Model
 
-La cellule de sauvegarde construit un dictionnaire `artifact` contenant le modèle entraîné, la liste des colonnes, les métriques, les hyperparamètres et surtout `route_profiles`. Ce dernier contient, pour chaque trajet, les moyennes historiques des features que l'utilisateur ne saisira pas (durée, nombre de trains, retards). Il est stocké dans le `.joblib` afin que l'application Streamlit n'ait pas besoin de recharger le CSV.
+The save cell builds an `artifact` dictionary containing the trained model, the list of columns, metrics, hyperparameters, and most importantly `route_profiles`. The latter holds, for each route, the historical averages of features the user will not enter (journey time, number of trains, delays). It is stored in the `.joblib` file so the Streamlit app does not need to reload the CSV.
 
-La sauvegarde est **manuelle** : on relance le notebook autant de fois qu'on veut, et on décommente la dernière ligne de la cellule pour écrire le fichier quand on est satisfait du résultat.
+Saving is **manual**: re-run the notebook as many times as needed, then uncomment the last line of the save cell to write the file when satisfied with the result.
 
 ```python
 # joblib.dump(artifact, MODEL_PATH)
-# print(f'Sauvegardé dans {MODEL_PATH}')
+# print(f'Saved to {MODEL_PATH}')
 ```
 
-### Lancer les notebooks
+### Running the Notebooks
 
 ```bash
 jupyter notebook tardis_model.ipynb
 ```
 
-Puis exécuter toutes les cellules (Cell → Run All).
+Then run all cells (Cell → Run All).
 
 ```bash
 jupyter notebook tardis_eda.ipynb
 ```
 
-Puis exécuter toutes les cellules (Cell → Run All).
+Then run all cells (Cell → Run All).
 
-### Lancer l'application
+### Running the App
 
 ```bash
 streamlit run tardis_dashboard.py
 ```
 
-L'application s'ouvre dans le navigateur (par défaut `http://localhost:8501`). Le fichier `tardis_model.joblib` doit être présent dans le même dossier ; il faut donc avoir exécuté le notebook et sauvegardé le modèle au préalable.
-
+The app opens in the browser (default `http://localhost:8501`). The `tardis_model.joblib` file must be present in the same folder — you need to have run the notebook and saved the model beforehand.
 
 ## Notes
 
-Le modèle s'appuie sur les caractéristiques de trafic du trajet (notamment les retards observés). Pour un mois futur, ces valeurs sont estimées à partir des moyennes historiques de la ligne ; le modèle fournit donc une estimation du retard typique d'un trajet à une période donnée, hors incidents exceptionnels (grèves, météo, pannes).
+The model relies on traffic characteristics of the journey (notably observed delays). For a future month, these values are estimated from the historical averages of the route; the model therefore provides an estimate of the typical delay for a journey at a given period, excluding exceptional events (strikes, weather, breakdowns).
